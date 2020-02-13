@@ -1,3 +1,5 @@
+minikube VM setup [make sure CPU count should be min 2].
+
 https://kubernetes.io/docs/tasks/tools/install-kubectl/#before-you-begin
 
 curl -LO https://storage.googleapis.com/kubernetes-release/release/`curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt`/bin/linux/amd64/kubectl
@@ -18,7 +20,7 @@ sudo apt-get install -y docker-ce
 sudo systemctl status docker
 
 sudo minikube config set vm-driver none
-sudo minikube start     [make sure CPU count should be min 2].
+sudo minikube start &    [make sure CPU count should be min 2].
         Selecting 'none' driver from user configuration (alternates: [])
 	Running on localhost (CPUs=2, Memory=2000MB, Disk=62689MB) ..
 	Preparing Kubernetes v1.17.0 on Docker '19.03.5' ...
@@ -42,12 +44,37 @@ kubectl cluster-info
 kubectl get pods --all-namespaces
 
 ### Run dashboard at given IP
-kubectl proxy --address='192.168.56.101' --disable-filter=true
+kubectl proxy --address='192.168.56.101' --disable-filter=true &
+
+kubectl get svc -A
+	NAMESPACE              NAME                        TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                  AGE
+	default                kubernetes                  ClusterIP   10.96.0.1       <none>        443/TCP                  11d
+	kube-system            kube-dns                    ClusterIP   10.96.0.10      <none>        53/UDP,53/TCP,9153/TCP   11d
+	kubernetes-dashboard   dashboard-metrics-scraper   ClusterIP   10.96.192.32    <none>        8000/TCP                 11d
+	kubernetes-dashboard   kubernetes-dashboard        ClusterIP   10.96.180.195   <none>        80/TCP                   11d
+
+### change kubernetes-dashboard spec type from ClusterIP to NodePort by running below command, save and exit.
+kubectl -n kubernetes-dashboard edit service kubernetes-dashboard
+
+#now check kubernetes-dashboard pod and you will find PORT number
+kubectl get svc -A
+NAMESPACE              NAME                        TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                  AGE
+default                kubernetes                  ClusterIP   10.96.0.1       <none>        443/TCP                  11d
+kube-system            kube-dns                    ClusterIP   10.96.0.10      <none>        53/UDP,53/TCP,9153/TCP   11d
+kubernetes-dashboard   dashboard-metrics-scraper   ClusterIP   10.96.192.32    <none>        8000/TCP                 11d
+kubernetes-dashboard   kubernetes-dashboard        NodePort    10.96.180.195   <none>        80:30590/TCP             11d
+
+# Acess the dashboard at 
+
+192.168.56.101:30590  
+
+
+
 
 #### Running a workload
 
 kubectl run hello-nginx --image=nginx --port=80        # this creates a deployment and we can investigate into the Pod that gets created, which will run the container
-# after rnning above command, new workload created and can be checked at dashboard under   Workloads -> Deployments
+# after running above command, new workload created and can be checked at dashboard under   Workloads -> Deployments
 # Also,  At dashboard under   Workloads -> Replica Sets - show pod details.
 
 kubectl get pods
@@ -79,12 +106,61 @@ kubectl scale --replicas=3 deployment/hello-nginx            # Workloads  ->  De
 
 # can be verified under Workloads -> Services -> Pods      or   Workloads -> Pods
 
+kubectl run hello-nginx --image=nginx --port=80
+
+kubectl run --generator=deployment/apps.v1 is DEPRECATED and will be removed in a future version. Use kubectl run --generator=run-pod/v1 or kubectl create instead.
+Error from server (AlreadyExists): deployments.apps "hello-nginx" already exists
+#need to delete deployment
+
+kubectl get replicaset
+NAME                    DESIRED   CURRENT   READY   AGE
+hello-nginx-c56599c4d   0         0         0       11d
+
+kubectl get deployments
+NAME          READY   UP-TO-DATE   AVAILABLE   AGE
+hello-nginx   0/0     0            0           11d
+
+kubectl delete deployments hello-nginx
+deployment.apps "hello-nginx" deleted
+
+kubectl get deployments
+No resources found in default namespace.
+
+kubectl get replicaset
+No resources found in default namespace.
 
 
+kubectl run hello-nginx --image=nginx --port=80
+kubectl run --generator=deployment/apps.v1 is DEPRECATED and will be removed in a future version. Use kubectl run --generator=run-pod/v1 or kubectl create instead.
+deployment.apps/hello-nginx created
+
+kubectl get pods --all-namespaces
+NAMESPACE              NAME                                         READY   STATUS    RESTARTS   AGE
+default                hello-nginx-c56599c4d-kdxlj                  1/1     Running   0          23s
+...
+...
+kubectl scale --replicas=5 deployment/hello-nginx 
+
+kubectl get pods --all-namespaces
+NAMESPACE              NAME                                         READY   STATUS              RESTARTS   AGE
+default                hello-nginx-c56599c4d-7z77z                  0/1     ContainerCreating   0          6s
+default                hello-nginx-c56599c4d-bgz4p                  0/1     ContainerCreating   0          6s
+default                hello-nginx-c56599c4d-kdxlj                  1/1     Running             0          68s
+default                hello-nginx-c56599c4d-lm5jb                  0/1     ContainerCreating   0          6s
+default                hello-nginx-c56599c4d-sbwz4                  0/1     ContainerCreating   0          6s
+...
+...
 
 
+# Pods will be recreated even after deleting them.
+kubectl delete --all pods --namespace=default
 
+#No authentication by default
+ps -ef | grep kubernetes-dashboard
+root      6544  2022  0 16:51 pts/0    00:00:00 grep --color=auto kubernetes-dashboard
+1001      7462  7352  0 14:49 ?        00:00:34 /dashboard --insecure-bind-address=0.0.0.0 --bind-address=0.0.0.0 --namespace=kubernetes-dashboard --enable-skip-login --disable-settings-authorizer
 
+https://www.youtube.com/watch?v=-qrH23K7GaI&list=PLBAFXs0YjviLrsyydCzxWrIP_1-wkcSHS&index=16
 
 
 
